@@ -6,8 +6,8 @@ import isosplit5
 import sys
 import os
 import multiprocessing
-import dask
-import dask.multiprocessing
+#import dask
+#import dask.multiprocessing
 from ._mdaio_impl import writemda32, writemda64, DiskReadMda, readmda
 import spikeextractors as se
 
@@ -87,6 +87,7 @@ def subsample_array(X: np.ndarray, max_num: int, seed: int=0):
 
 
 def compute_principal_components(X: np.ndarray, num_components: int):
+    #print("DEBUG in compute_principal_components: X.shape=", X.shape)
     u, s, vt = np.linalg.svd(X)
     u = u[:, :num_components]
     return u
@@ -113,6 +114,7 @@ def compute_templates_from_clips_and_labels(clips: np.ndarray, labels: np.ndarra
 
 
 def compute_template_channel_peaks(templates: np.ndarray, *, detect_sign: int):
+    #print("DEBUG: in compute_template_channel_peaks")
     if detect_sign < 0:
         templates = templates*(-1)
     elif detect_sign == 0:
@@ -270,11 +272,13 @@ def compute_event_features_from_timeseries_model(X: Any, times: np.ndarray, *, n
     times_for_pca = subsample_array(times, max_num_clips_for_pca)
     # clips_for_pca=extract_clips_from_timeseries_model(X,times_for_pca,clip_size=clip_size,nbhd_channels=nbhd_channels)
     clips_for_pca = np.zeros((M_neigh, clip_size, len(times_for_pca)))
+    #print("DEBUG: len(chunk_infos)=", len(chunk_infos))
     for ii in range(len(chunk_infos)):
         chunk0 = chunk_infos[ii]
         inds0 = np.where((chunk0['t1'] <= times_for_pca)
                          & (times_for_pca < chunk0['t2']))[0]
         if len(inds0) > 0:
+            # print("DEBUG: extracting a subsetp of clips from chunk#%d for PCA"%(ii))
             X0 = X.getChunk(
                 t1=chunk0['t1']-padding, t2=chunk0['t2']+padding, channels=nbhd_channels)
             times0 = times_for_pca[inds0]
@@ -284,12 +288,17 @@ def compute_event_features_from_timeseries_model(X: Any, times: np.ndarray, *, n
 
     # Compute the principal components
     # use twice as many features, because of branch method
+    #print("DEBUG: calling compute_principal_components")
     principal_components = compute_principal_components(clips_for_pca.reshape(
         (M_neigh*clip_size, len(times_for_pca))), num_features*2)  # (MT x 2F)
+    #print("DEBUG: compute_principal_components finished")
 
     # Compute the features for all the clips
     features = np.zeros((num_features*2, len(times)))
     for ii in range(len(chunk_infos)):
+
+        # print("DEBUG: PC-transforming clips from chunk#%d for PCA"%(ii))
+
         chunk0 = chunk_infos[ii]
         X0 = X.getChunk(t1=chunk0['t1']-padding,
                         t2=chunk0['t2']+padding, channels=nbhd_channels)
@@ -488,6 +497,10 @@ class _NeighborhoodSorter:
                     print('No duplicate events found for channel {} in {}'.format(
                         self._central_channel, mode))
         # times=np.sort(times)
+        # ADDED FOR DEBUGGIN PURPOSES
+        # if self._sorting_opts['verbose']:
+        #     print("Calling compute_event_features_from_timeseries_model ...(this print statement is added for debugging)")
+
         features = compute_event_features_from_timeseries_model(
             X, times, nbhd_channels=nbhd_channels, clip_size=clip_size, max_num_clips_for_pca=max_num_clips_for_pca, num_features=num_features*2, chunk_infos=chunk_infos)
 
@@ -539,10 +552,12 @@ class _NeighborhoodSorter:
                             print('Re-assigning {} events from {} to {} with dt={} (k={})'.format(len(
                                 inds_k), m_central+1, nbhd_channels[assigned_channel_within_neighborhood]+1, dt, k+1))
                             sys.stdout.flush()
+            #print("DEBUG: writing phase1 times and channel assignments to hdf5")
             with h5py.File(self._hdf5_path, "a") as f:
                 f.create_dataset('phase1-times', data=times2)
                 f.create_dataset('phase1-channel-assignments',
                                  data=channel_assignments2)
+            #print("DEBUG: done writing phase 1 times and channel assignments to hdf5")
         elif mode == 'phase2':
             #delete spikes from within detection interval
             for label in np.unique(labels):
@@ -684,6 +699,12 @@ def prepare_timeseries_hdf5_from_recording(recording, timeseries_hdf5_fname, *, 
             padded_chunk[:, aa:aa+s2 -
                          s1] = recording.get_traces(start_frame=s1, end_frame=s2)
 
+            # DEBUG
+            #import matplotlib.pyplot as plt
+            #plt.figure()
+            #plt.plot(padded_chunk.T)
+            #plt.title("start_frame=%d, end_frame=%d"%(s1, s2))
+            #plt.show()
             for m in range(M):
                 f.create_dataset('part-{}-{}'.format(m, j),
                                  data=padded_chunk[m, :].ravel())
@@ -805,7 +826,7 @@ class MountainSort4:
             print('Num. workers = {}'.format(num_workers))
 
         # overwrite default with multiprocessing scheduler
-        dask.config.set(scheduler='processes')
+        # dask.config.set(scheduler='processes')
 
         clip_size = self._sorting_opts['clip_size']
 
@@ -838,7 +859,7 @@ class MountainSort4:
             print('Preparing neighborhood sorters (M={}, N={})...'.format(M, N))
             sys.stdout.flush()
         neighborhood_sorters = []
-        dask_list = []
+        # dask_list = []
 
         for m in range(M):
             NS = _NeighborhoodSorter()
@@ -852,17 +873,25 @@ class MountainSort4:
                 os.remove(fname0)
             NS.setHdf5FilePath(fname0)
             neighborhood_sorters.append(NS)
-            tmp_dask = dask.delayed(run_phase1_sort)(NS)
-            dask_list.append(tmp_dask)
+            # tmp_dask = dask.delayed(run_phase1_sort)(NS)
+            # dask_list.append(tmp_dask)
 
-        dask.compute(*dask_list, num_workers=self._num_workers)
+        # dask.compute(*dask_list, num_workers=self._num_workers)
+        print("USING multiprocessing.Pool INSTEAD OF dask")
+        pool = multiprocessing.Pool(num_workers)
+        pool.map(run_phase1_sort, neighborhood_sorters)
+        pool.close()
+        pool.join()
 
+        print("DEBUG -- Phase1 sort - all processes complete!")
         # for m in range(M):
         #    print ('Running phase1 neighborhood sort for channel {} of {}...'.format(m+1,M)); sys.stdout.flush()
         #    neighborhood_sorters[m].runPhase1Sort()
-        dask_list = []
+        # dask_list = []
         for m in range(M):
+            #print("DEBUG -- Gettin Phase1Times for %d/%d"%(m,M))
             times_m = neighborhood_sorters[m].getPhase1Times()
+            #print("DEBUG -- Gettin Phase1ChannelAssignments for %d/%d"%(m,M))
             channel_assignments_m = neighborhood_sorters[m].getPhase1ChannelAssignments(
             )
             for m2 in range(M):
@@ -870,10 +899,16 @@ class MountainSort4:
                 if len(inds_m_m2) > 0:
                     neighborhood_sorters[m2].addAssignedEventTimes(
                         times_m[inds_m_m2])
-        for neighborhood_sorter in neighborhood_sorters:
-            tmp_dask = dask.delayed(run_phase2_sort)(neighborhood_sorter)
-            dask_list.append(tmp_dask)
-        dask.compute(*dask_list, num_workers=self._num_workers)
+        #for neighborhood_sorter in neighborhood_sorters:
+        #    tmp_dask = dask.delayed(run_phase2_sort)(neighborhood_sorter)
+        #    dask_list.append(tmp_dask)
+        # dask.compute(*dask_list, num_workers=self._num_workers)
+        
+        print("DEBUG -- Starting parallelized Phase2 sort")
+        pool = multiprocessing.Pool(num_workers)
+        pool.map(run_phase2_sort, neighborhood_sorters)
+        pool.close()
+        pool.join()
 
         # for m in range(M):
         #    print ('Running phase2 sort for channel {} of {}...'.format(m+1,M)); sys.stdout.flush()
