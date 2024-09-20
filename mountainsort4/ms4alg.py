@@ -10,7 +10,7 @@ import multiprocessing
 #import dask.multiprocessing
 from ._mdaio_impl import writemda32, writemda64, DiskReadMda, readmda
 import spikeextractors as se
-
+import tqdm
 
 import datetime
 
@@ -681,7 +681,7 @@ def prepare_timeseries_hdf5_from_recording(recording, timeseries_hdf5_fname, *, 
         f.create_dataset('padding', data=[padding])
         f.create_dataset('num_channels', data=[M])
         f.create_dataset('num_timepoints', data=[N])
-        for j in range(num_chunks):
+        for j in tqdm.tqdm(range(num_chunks), desc="Preparing HDF5 from recording object", total=num_chunks):
             padded_chunk = np.zeros(
                 (M, chunk_size_with_padding), dtype=float)  # fix dtype here
             t1 = int(j*chunk_size)  # first timepoint of the chunk
