@@ -4,7 +4,7 @@ requires = [ "setuptools>=61" ]
 
 [project]
 name = "mountainsort4"
-version = "1.0.5"
+version = "1.0.7"
 description = "Spike sorting using Mountainsort4 algorithm"
 authors = [
   { name = "Jeremy Magland", email = "jmagland@flatironinstitute.org" },
@@ -18,7 +18,7 @@ classifiers = [
 dependencies = [
   "dask",
   "h5py",
-  "isosplit5>=0.2",
+  "isosplit5>=0.2.3",
   "numpy",
   "pybind11",
   "scikit-learn",
